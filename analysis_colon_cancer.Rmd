@@ -1,0 +1,88 @@
+---
+title: "colon"
+output: html_document
+date: "2023-04-30"
+---
+
+```{r setup, include=FALSE}
+install.packages("BiocManager")
+```
+
+```{r}
+BiocManager::install("MSstats")
+```
+```{r}
+filepath <- "C:\\Users\\Beatrice\\Downloads\\colon_cancer_combined_modified_peptide.tsv"
+input <- read.table(filepath, header=TRUE, sep="\t", quote="", comment.char="")
+filtered_input <- input[grepl("79.9663", input$"Assigned.Modifications"), ]
+nrow(input)
+filtered_input
+```
+
+
+
+filter rows with phosphorilation:
+```{r}
+filepath <- "C:\\Users\\Beatrice\\Downloads\\colon_cancer_combined_modified_peptide.tsv"
+input <- read.table(filepath, header=TRUE, sep="\t", quote="", comment.char="")
+filtered_input <- input[grepl("79.9663", input$"Assigned.Modifications"), ]
+nrow(filtered_input)
+
+```
+```{r}
+# Find column indices that have a name structure "I_II_*.Spectral.Count"
+col_indices_I_II <- grep("^I_II_[0-9]+\\.Spectral.Count", names(filtered_input))
+
+# Include the protein_id column index
+#col_indices_I_II <- c(11, col_indices_I_II)
+col_indices_I_II
+
+# Subset the table to keep only rows with non-zero values in those columns
+filtered_table_I_II <- subset(filtered_input, rowSums(filtered_input[, col_indices_I_II] != 0) > 0, select = col_indices_I_II)
+
+# View the filtered table
+print(filtered_table_I_II[,0])
+
+```
+```{r}
+# Get the row numbers and protein IDs from filtered_input table
+row_protein_ids <- filtered_input[c(filtered_table_I_II[,0])]
+
+# Create a new table variable that has Protein.ID and the rest of filtered_table_I_II
+new_table_I_II <- cbind(row_protein_ids, filtered_table_I_II[, -1])
+
+# View the new table
+print(new_table_I_II)
+
+```
+
+
+
+```{r}
+# Find column indices that have a name structure "I_II_*.Spectral.Count"
+col_indices_III_IV <- grep("^III_IV_[0-9]+\\.Spectral.Count", names(new_table))
+
+# Include the protein_id column index
+col_indices_III_IV <- c(11, col_indices_III_IV)
+
+# Subset the table to keep only rows with non-zero values in those columns
+filtered_table_III_IV <- subset(new_table, rowSums(new_table[, col_indices_III_IV] != 0) > 0, select = col_indices_III_IV)
+
+# View the filtered table
+print(filtered_table_III_IV)
+
+```
+```{r}
+# Find common values in the first column between the two tables
+common_values <- intersect(filtered_table_III_IV[,1], filtered_table_I_II[,1])
+
+# Subset each table to keep only rows with common values in the first column
+filtered_table_III_IV_common <- filtered_table_III_IV[filtered_table_III_IV[,1] %in% common_values,]
+filtered_table_I_II_common <- filtered_table_I_II[filtered_table_I_II[,1] %in% common_values,]
+
+# View the filtered tables with common rows
+print(filtered_table_III_IV_common)
+print(filtered_table_I_II_common)
+
+```
+
