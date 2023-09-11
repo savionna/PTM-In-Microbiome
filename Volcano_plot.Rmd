@@ -1,0 +1,209 @@
+---
+title: "volcano plot"
+---
+
+This R markdown contains:
+1. Volcano plot to identify significant proteins
+2. saved the significant protein to the file: volcano_50_significant_p.xlsx (used in taxa_labeled.Rmd)
+2. Correlation map between the patients
+3. violin plot
+
+
+
+# Using the output of fragpipe:
+```{r}
+### Read IonQuant output
+library(readxl)
+
+IonQuant_output <- read_xlsx(path = "C:\\Users\\Beatrice\\Documents\\Project\\colon_cancer_python\\colon_cancer_combined_protein.xlsx")
+
+```
+
+Clean and filter the data:
+
+```{r}
+
+library(dplyr)
+
+# Filter out values containing "HUMAN" in the "protein" column
+IonQuant_output <- subset(IonQuant_output, !grepl("HUMAN", Protein))
+tail(IonQuant_output)
+
+## Remove contaminates
+IonQuant_output <- IonQuant_output %>% filter(substr(IonQuant_output$Protein,4,8) != "Cont_")
+
+# Filter proteins identified by only 1 peptide
+IonQuant_output_filtered <- IonQuant_output %>% filter(`Combined Total Peptides`>1)
+
+## Get only the LFQ intensities - using the MaxLFQ method
+IonQuant_output_filtered_intensities <- IonQuant_output_filtered %>% select(Protein, `III_IV_1 MaxLFQ Intensity`, `III_IV_2 MaxLFQ Intensity`, `III_IV_3 MaxLFQ Intensity`,`III_IV_4 MaxLFQ Intensity`,`III_IV_5 MaxLFQ Intensity`,`III_IV_6 MaxLFQ Intensity`, `III_IV_7 MaxLFQ Intensity`, `III_IV_8 MaxLFQ Intensity`, `III_IV_9 MaxLFQ Intensity`, `III_IV_10 MaxLFQ Intensity`, `III_IV_11 MaxLFQ Intensity`,`III_IV_12 MaxLFQ Intensity`,`I_II_1 MaxLFQ Intensity`, `I_II_2 MaxLFQ Intensity`, `I_II_3 MaxLFQ Intensity`, `I_II_4 MaxLFQ Intensity`, `I_II_5 MaxLFQ Intensity`,`I_II_6 MaxLFQ Intensity`,`I_II_7 MaxLFQ Intensity`,`I_II_8 MaxLFQ Intensity`, `I_II_9 MaxLFQ Intensity`, `I_II_10 MaxLFQ Intensity`, `I_II_11 MaxLFQ Intensity`,`I_II_12 MaxLFQ Intensity`)
+
+colnames(IonQuant_output_filtered_intensities) <- c("Protein","III.IV_1","III.IV_2","III.IV_3","III.IV_4","III.IV_5","III.IV_6","III.IV_7","III.IV_8","III.IV_9","III.IV_10","III.IV_11","III.IV_12","I.II_1","I.II_2","I.II_3","I.II_4","I.II_5","I.II_6","I.II_7","I.II_8","I.II_9","I.II_10","I.II_11","I.II_12")
+
+## Filter proteins with 0 intensities in all samples
+IonQuant_output_filtered_intensities <- IonQuant_output_filtered_intensities[rowSums(IonQuant_output_filtered_intensities[,2:25])>0,]
+colnames(IonQuant_output_filtered_intensities)
+# Filter proteins with >%50 missing values
+IonQuant_output_filtered_intensities <- IonQuant_output_filtered_intensities[rowSums(IonQuant_output_filtered_intensities == 0) <= 12, ]
+colnames(IonQuant_output_filtered_intensities)
+
+
+### Calculate correlations
+table_of_correlations <- cor(IonQuant_output_filtered_intensities[,2:25])
+table_of_correlations <- as.data.frame(table_of_correlations)
+
+```
+
+# Hierarchical Clustering Correlation Analysis: Revealing Patient Pair Relationships
+
+```{r}
+library(corrplot)
+
+corrplot(cor(IonQuant_output_filtered_intensities[,2:25]),
+         method = "circle",       
+         order = "hclust",         # Ordering method of the matrix
+         hclust.method = "ward.D", # If order = "hclust", is the cluster method to be used
+         addrect = 2,              # If order = "hclust", number of cluster rectangles
+         rect.col = 3,             # Color of the rectangles
+         rect.lwd = 3)             # Line width of the rectangles
+```
+# Violin Plots: Insight into Protein Intensity Distribution
+
+```{r}
+library(reshape2)
+library(ggplot2)
+
+# Melt the data to long format
+IonQuant_output_filtered_intensities_long <- melt(IonQuant_output_filtered_intensities)
+
+# Rename columns
+colnames(IonQuant_output_filtered_intensities_long) <- c("Protein", "Condition", "Intensity")
+
+# Create the plot with violin plots
+intensities_plot <- ggplot(data = IonQuant_output_filtered_intensities_long, aes(x = Condition, y = Intensity, fill = Condition)) +
+  geom_violin() +
+  scale_y_log10() +
+  labs(title = "Violin Plots of Protein Intensities by Condition",
+       x = "Condition",
+       y = "Intensity (log10 scale)",
+       fill = "Condition") +
+  theme_minimal() +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Set the size of the plot
+options(repr.plot.width = 10, repr.plot.height = 6)  # Adjust width and height as needed
+
+intensities_plot
+
+```
+
+
+# Volcano Plot Analysis: Detecting Significant Protein Differences
+
+```{r}
+library(ggpubr)
+library(rstatix)
+library(ggrepel)
+library(dplyr)
+library(broom)
+library(tidyr)
+library(BiocManager)
+library(EnhancedVolcano)
+
+
+# Split the condition into the disease stage and the bioreplicate (the patient number)
+
+IonQuant_output_filtered_intensities_long <- IonQuant_output_filtered_intensities_long %>% separate(Condition, into = c('Condition','BioReplicate'), extra = 'drop',sep = "_")
+
+# Convert the Condition variable to a factor
+
+IonQuant_output_filtered_intensities_long$Condition <-  as.factor(IonQuant_output_filtered_intensities_long$Condition)
+
+# Running t.test on each of the proteins
+
+protein_t.test_data <- IonQuant_output_filtered_intensities_long %>% dplyr::group_by(Protein)  %>% do(broom::tidy(t.test(Intensity ~ Condition, data = .))) %>% adjust_pvalue(method = "fdr") %>%
+  add_significance() %>%  ungroup
+
+# Or the non-parametric Mann-Whitney (Wilcoxon rank-sum test)
+protein_mann_whitney <- IonQuant_output_filtered_intensities_long %>% dplyr::group_by(Protein)  %>% do(broom::tidy(wilcox.test(Intensity ~ Condition, data = .))) %>% adjust_pvalue(method = "fdr") %>%
+  add_significance() %>%  ungroup
+
+# Sum the intensities values
+IonQuant_output_filtered_intensities_long.sum = IonQuant_output_filtered_intensities_long %>% group_by(Protein, Condition) %>% summarise(mean_intensity= mean(Intensity)) %>% ungroup()
+
+# Spread the FC data
+IonQuant_output_filtered_intensities_long.sum <- IonQuant_output_filtered_intensities_long.sum %>% spread(key = Condition,value = mean_intensity)
+
+# Calculate the FC for each protein
+IonQuant_output_filtered_intensities_long.sum <- IonQuant_output_filtered_intensities_long.sum %>% mutate(Stage_3.4_vs_Stage_1.2 = III.IV/I.II)
+
+# Combine FC and adj.pvalue
+FC_pval_table <- inner_join(x = IonQuant_output_filtered_intensities_long.sum, y = protein_t.test_data, by = "Protein")
+
+FC_pval_table <- FC_pval_table %>% select(Protein, Stage_3.4_vs_Stage_1.2,p.value.adj)
+
+colnames(FC_pval_table) <- c("Protein","FC_Adv_stage_vs_early_stage","p_value")
+
+# Log2 transform of the FC
+FC_pval_table <- FC_pval_table %>% mutate(FC_Adv_stage_vs_early_stage=log(FC_Adv_stage_vs_early_stage,2))
+
+# Remove any non-finite (NaN or infinite) values - if there was division by zero, etc.
+FC_pval_table <- FC_pval_table %>%  filter(is.finite(FC_Adv_stage_vs_early_stage) & is.finite(p_value))
+
+# Generate the volcano plot
+Adv_vs_early_volcano <- EnhancedVolcano(toptable = FC_pval_table,x ="FC_Adv_stage_vs_early_stage"  ,y="p_value",lab = FC_pval_table$Protein,pCutoff = 0.05, title = NULL, subtitle = "Advanced stage vs. Early stage", ylim = c(0, 3))
+
+# Print the volcano plot
+
+Adv_vs_early_volcano
+
+
+```
+
+
+Save significant proteins:
+
+```{r}
+library(writexl)
+
+# Set the threshold values for p-value and fold change
+pvalue_threshold <- 0.05
+fold_change_threshold <- 1  # Adjust the threshold value as needed
+
+# Filter significant proteins based on p-value and fold change
+significant_proteins <- FC_pval_table[FC_pval_table$p_value < pvalue_threshold & abs(FC_pval_table$FC_Adv_stage_vs_early_stage) > fold_change_threshold, ]
+
+summary(significant_proteins)
+
+# Specify the output file path
+output_file <- "/Users/rotempink/Library/Mobile Documents/com~apple~CloudDocs/final_project/proteom_project/excel/volcano_50_significant_p.xlsx"
+
+# Write the significant proteins to an Excel file
+write_xlsx(significant_proteins, path = output_file)
+
+### Save to file the plot and
+ggsave(filename = "Adv_vs_early_volcano.svg",plot = Adv_vs_early_volcano,device = "svg",dpi = 300)
+
+write_csv(x = FC_pval_table,file = "Adv_vs_early_CRC_FC_pval_table.csv")
+
+```
+
+
+Save all proteins fold change:
+```{r}
+# Set the threshold values for p-value and fold change
+#pvalue_threshold <- 0.05
+#fold_change_threshold <- 0  # Adjust the threshold value as needed
+
+# Filter significant proteins based on p-value and fold change
+all_proteins_for_enrich <- FC_pval_table
+summary(all_proteins_for_enrich)
+
+# Specify the output file path
+output_file <- "all_proteins_for_enrich.xlsx"
+
+# Write the significant proteins to an Excel file
+write_xlsx(all_proteins_for_enrich, path = output_file)
+
+```
+

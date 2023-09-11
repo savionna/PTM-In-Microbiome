@@ -1,0 +1,78 @@
+---
+title: "sagnificat_protiens_for_taxa"
+---
+This R markdown contains:
+1. Adding stages labels to the significant proteins from volcano plot.
+2. Result was save in the file: sagnificant_prteins_with_labels.xlsx
+3. The result file is used in taxa_significant_proteins.Rmd
+
+
+Add labels to the significant proteins from volcano plot:
+```{r}
+
+library(readxl)
+library(dplyr)
+
+all_proteins <- read_xlsx(path = "C:\\Users\\Beatrice\\Documents\\Project\\colon_cancer_python\\colon_cancer_combined_protein.xlsx")
+
+# Select the desired columns
+selected_columns <- grep("(I_II|III_IV).*MaxLFQ Intensity", colnames(all_proteins), value = TRUE)
+print(selected_columns)
+
+# Create a new table with the sum of the selected columns
+new_table <- all_proteins %>%
+  mutate(
+    I_II_sum = rowSums(select(., one_of(selected_columns[startsWith(selected_columns, "I_II")]))),
+    III_IV_sum = rowSums(select(., one_of(selected_columns[startsWith(selected_columns, "III_IV")])))
+  )
+
+new_table2 <- new_table %>%
+  mutate(
+    label = ifelse(I_II_sum > III_IV_sum, 12, ifelse(I_II_sum < III_IV_sum, 34, 0))
+  )
+# Specify the output file path
+output_file <- "combined_labels.xlsx"
+
+# Write the new_table to an Excel file
+write_xlsx(new_table2, path = output_file)
+
+# View the new table
+print(new_table$I_II_sum)
+print(new_table$III_IV_sum)
+
+# Assuming your first table is named "table1" and the second table is named "table2"
+
+proteins_with_label <- read_xlsx(path ="combined_labels.xlsx")
+sagnificant_protiens_from_volano <- read_xlsx(path ="volcano_50_significant_p_nh.xlsx")
+
+
+# Perform a left join based on the "Protein" column to add the "label" column from table2 to table1
+merged_table <- merge(sagnificant_protiens_from_volano, proteins_with_label[, c("Protein", "label")], by = "Protein", all.x = TRUE)
+
+# View the merged_table
+summary(merged_table)
+sapply(merged_table, class)
+numeric_columns <- merged_table[, sapply(merged_table, is.numeric)]
+boxplot(numeric_columns)
+barplot(table(merged_table$label))
+
+
+# Count the occurrences of each category in the column
+category_counts <- table(merged_table$label)
+
+# Set custom colors for each category (replace with your desired colors)
+my_colors <- c("#35A29F", "#0B666A")
+
+# Set custom names for each box (replace with your desired names)
+box_names <- c("Stages I_II", "Stages III_IV")
+
+# Create the bar plot with custom colors, box names, and axis titles
+barplot(category_counts, col = my_colors, ylim = c(0, max(category_counts) * 1.2),
+        names.arg = box_names, xlab = "Labels", ylab = "Count", main = "Significant proteins distribution to stages")
+
+write_xlsx(merged_table, path = "sagnificant_prteins_with_labels.xlsx")
+
+
+
+```
+

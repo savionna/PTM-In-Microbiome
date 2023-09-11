@@ -1,0 +1,337 @@
+---
+title: "taxa_significant_proteins"
+---
+
+This R markdown contains:
+1. The taxa groups of each stage group - for the significant protwins found in the volcano plot.
+2. The common taxa groups
+3. The unique taxa groups
+
+Load the data from eggNOG:
+
+```{r}
+library(readxl)
+library(writexl)
+
+
+# Load the Excel file
+left_data <- read_excel("C:\\Users\\Beatrice\\Documents\\Project\\identified_uhgp_bacterial_proteins_after_process.xlsx")
+nrow(left_data)
+```
+Join the data with the significant protein list:
+```{r}
+right_data <- read_excel("sagnificant_prteins_with_labels.xlsx")
+nrow(right_data)
+```
+
+
+```{r}
+library(dplyr)
+   
+merged_df <- right_join(left_data, right_data, by = "Protein")
+merged_df
+nrow(merged_df)
+
+# Remove duplicate rows from filtered_rows
+merged_df <- merged_df[!duplicated(merged_df), ]
+nrow(merged_df)
+```
+Add labels to the proteins. "12" for stage I_II and "34" for stage III_IV:
+```{r}
+
+# Get the MaxLFQ intensity columns with the specified pattern
+filtered_rows_I_II <- merged_df[merged_df$label == "12", ]
+nrow(filtered_rows_I_II)
+filtered_rows_III_IV <- merged_df[merged_df$label == "34", ]
+nrow(filtered_rows_III_IV)
+```
+
+split eggNOG for stages I-II
+```{r}
+library(tidyverse)
+
+# Extract taxonomic information from the "eggNOG_OGs" column
+filtered_rows_I_II$Taxonomy <- character(nrow(filtered_rows_I_II))  # Create an empty column
+#for (i in seq_len(nrow(data))) {
+  Taxonomy <- (strsplit(filtered_rows_I_II$eggNOG_OGs, "\\|"))
+  Taxonomy_new_I_II <- map_dfr(Taxonomy[1:29], ~as_tibble(t(.)))
+  Taxonomy_new_I_II$V2 <- gsub("@1", "", Taxonomy_new_I_II$V2)
+  Taxonomy_new_I_II$V2 <- gsub("@2", "", Taxonomy_new_I_II$V2)
+  Taxonomy_new_I_II$V2 <- gsub("root,", "", Taxonomy_new_I_II$V2)
+  Taxonomy_new_I_II$V3 <- str_remove(Taxonomy_new_I_II$V3, ",.*")
+  Taxonomy_new_I_II$V4 <- str_remove(Taxonomy_new_I_II$V4, ",.*")
+  Taxonomy_new_I_II$V5 <- str_remove(Taxonomy_new_I_II$V5, ",.*")
+  Taxonomy_new_I_II$V6 <- str_remove(Taxonomy_new_I_II$V6, ",.*")
+
+  Taxonomy_new_I_II$V3_V4_V5_V6 <- paste(Taxonomy_new_I_II$V3, Taxonomy_new_I_II$V4,Taxonomy_new_I_II$V5, Taxonomy_new_I_II$V6, sep = " , ")
+  Taxonomy_new_I_II
+```
+graph for proteins fro groups 1-2:
+```{r}
+# Generate the taxonomic graph
+filtered_root_I_II <- Taxonomy_new_I_II %>%
+  filter(!grepl("^root", V3_V4_V5_V6))
+ggplot(aes(x = filtered_root_I_II$V3_V4_V5_V6, fill = filtered_root_I_II$V3_V4_V5_V6), data = filtered_root_I_II) +
+geom_histogram(stat = "count") +
+xlab("Taxonomic Group") +
+ylab("Count") +
+ggtitle("Taxonomic Graph") +
+theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.key.size = unit(0.1, "cm"))
+```
+
+split eggNOG for stages III-IV:
+
+```{r}
+library(tidyverse)
+
+# Extract taxonomic information from the "eggNOG_OGs" column
+filtered_rows_III_IV$Taxonomy <- character(nrow(filtered_rows_III_IV))  # Create an empty column
+#for (i in seq_len(nrow(data))) {
+  Taxonomy <- (strsplit(filtered_rows_III_IV$eggNOG_OGs, "\\|"))
+  Taxonomy_new_III_IV <- map_dfr(Taxonomy[1:12], ~as_tibble(t(.)))
+  Taxonomy_new_III_IV$V2 <- gsub("@1", "", Taxonomy_new_III_IV$V2)
+  Taxonomy_new_III_IV$V2 <- gsub("@2", "", Taxonomy_new_III_IV$V2)
+  Taxonomy_new_III_IV$V2 <- gsub("root,", "", Taxonomy_new_III_IV$V2)
+
+  Taxonomy_new_III_IV$V3 <- str_remove(Taxonomy_new_III_IV$V3, ",.*")
+  Taxonomy_new_III_IV$V4 <- str_remove(Taxonomy_new_III_IV$V4, ",.*")
+  Taxonomy_new_III_IV$V5 <- str_remove(Taxonomy_new_III_IV$V5, ",.*")
+  Taxonomy_new_III_IV$V6 <- str_remove(Taxonomy_new_III_IV$V6, ",.*")
+
+  Taxonomy_new_III_IV$V3_V4_V5_V6 <- paste(Taxonomy_new_III_IV$V3,   Taxonomy_new_III_IV$V4,Taxonomy_new_III_IV$V5,Taxonomy_new_III_IV$V6, sep = " , ")
+  
+  Taxonomy_new_III_IV <- Taxonomy_new_III_IV %>%
+  filter(V3_V4_V5_V6 != "NA , NA , NA , NA")
+
+  Taxonomy_new_III_IV
+```
+
+graph for proteins fro groups 3-4:
+
+```{r}
+# Generate the taxonomic graph
+filtered_root_III_IV <- Taxonomy_new_III_IV %>%
+  filter(!grepl("^root", V3_V4_V5_V6))
+ggplot(aes(x = filtered_root_III_IV$V3_V4_V5_V6, fill = filtered_root_III_IV$V3_V4_V5_V6), data = filtered_root_III_IV) +
+  geom_histogram(stat = "count") +
+  xlab("Taxonomic Group") +
+  ylab("Count") +
+  ggtitle("Taxonomic Graph") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.key.size = unit(0.1, "cm"))
+```
+
+Common taxa groups:
+```{r}
+# Find the common taxonomic groups
+common_taxa <- intersect(filtered_root_I_II$V3_V4_V5_V6, filtered_root_III_IV$V3_V4_V5_V6)
+common_taxa
+if (length(common_taxa) > 0) {
+  # Filter datasets to include only common taxa
+  filtered_common_I_II <- filtered_root_I_II %>% filter(V3_V4_V5_V6 %in% common_taxa)
+  filtered_common_III_IV <- filtered_root_III_IV %>% filter(V3_V4_V5_V6 %in% common_taxa)
+
+  # Create a dataframe to store the common taxonomic groups and their counts
+  common_taxa_counts <- data.frame(Taxonomic_Group = common_taxa,
+                                   Count_I_II = table(filtered_common_I_II$V3_V4_V5_V6),
+                                   Count_III_IV = table(filtered_common_III_IV$V3_V4_V5_V6))
+  # Calculate the total count
+  common_taxa_counts$Total_Count <- common_taxa_counts$Count_I_II.Freq + common_taxa_counts$Count_III_IV.Freq
+common_taxa_counts
+  # Create the plot to display the common taxonomic groups and their counts
+  ggplot(common_taxa_counts, aes(x = Taxonomic_Group, y = Total_Count, fill = Taxonomic_Group)) +
+    geom_bar(stat = "identity") +
+    xlab("Taxonomic Group") +
+    ylab("Count") +
+    ggtitle("Common Taxonomic Groups") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.key.size = unit(0.1, "cm"))
+} else {
+  print("No common taxonomic groups found.")
+}
+
+```
+
+
+# Taxonomic Analysis of Significant Proteins: Venn Diagram Insights
+
+```{r}
+
+library(VennDiagram)
+
+# Extract the values from the V3_V4_V5_V6 column of each dataframe
+set1_values <- unique(filtered_root_III_IV$V3_V4_V5_V6)
+set2_values <- unique(filtered_root_I_II$V3_V4_V5_V6)
+
+# Combine the values into a list with appropriate names
+set_names <- list("Stage III_IV" = set1_values, "Stage I_II" = set2_values)
+
+# Set custom colors for each set (you can change these to your preferred colors)
+set_colors <- c("#FFEAD2", "#ACB1D6")
+
+# Plot the Venn diagram with labels and colors
+venn.plot <- venn.diagram(set_names, filename = NULL, output = TRUE,
+                          col = set_colors,
+                          fill = set_colors,
+                          alpha = 0.5, # Set transparency for the circles
+                          scaled = TRUE, # Use scaled = TRUE to fit the labels within circles
+                          main = "Common and unique taxa groups", # Main title for the plot
+                          main.cex = 1.5) # Adjust main title size
+
+# Get the Venn diagram labels
+venn_labels <- venn.plot$label
+
+# Customize label colors (using set_colors) and add them back to the plot
+for (i in seq_along(venn_labels)) {
+  venn_labels[[i]]$col <- set_colors[i]
+}
+venn.plot$label <- venn_labels
+
+# Add a legend to the plot
+grid.newpage()
+grid.draw(venn.plot)
+
+# Save the plot to a file (optional)
+# dev.copy(png, "venn_diagram.png")
+# dev.off()
+
+
+
+```
+
+Unique taxa groups for stages I_II:
+
+```{r}
+
+# Load the required packages for data manipulation and visualization
+library(dplyr)
+library(ggplot2)
+
+# Find the common taxonomic groups
+common_taxa_2 <- intersect(filtered_root_I_II$V3_V4_V5_V6, filtered_root_III_IV$V3_V4_V5_V6)
+
+# Find the taxa groups that are unique to filtered_root_I_II
+unique_taxa_I_II <- filtered_root_I_II$V3_V4_V5_V6[!filtered_root_I_II$V3_V4_V5_V6 %in% common_taxa_2]
+
+if (length(unique_taxa_I_II) > 0) {
+  # Filter the dataset to include only unique taxa in filtered_root_I_II
+  filtered_unique_I_II <- filtered_root_I_II %>% filter(V3_V4_V5_V6 %in% unique_taxa_I_II)
+
+  # Calculate the counts of unique taxa in filtered_root_I_II
+  unique_taxa_counts <- filtered_unique_I_II %>% count(V3_V4_V5_V6) %>%
+    rename(Taxonomic_Group = V3_V4_V5_V6, Count_I_II = n) %>%
+    mutate(Count_III_IV = 0)  # Since these taxa are unique to filtered_root_I_II, count in filtered_root_III_IV is 0.
+
+  # Calculate the total count
+  unique_taxa_counts$Total_Count <- unique_taxa_counts$Count_I_II
+  unique_taxa_counts
+
+  # Create the plot to display the unique taxonomic groups and their counts
+  ggplot(unique_taxa_counts, aes(x = Taxonomic_Group, y = Total_Count, fill = Taxonomic_Group)) +
+    geom_bar(stat = "identity") +
+    xlab("Taxonomic Group") +
+    ylab("Count") +
+    ggtitle("Unique Taxonomic Groups in stages I_II") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.key.size = unit(0.1, "cm"))
+} else {
+  print("No unique taxonomic groups found in filtered_root_I_II.")
+}
+
+```
+Unique taxa groups for stages III_IV:
+
+```{r}
+# Load the required packages for data manipulation and visualization
+library(dplyr)
+library(ggplot2)
+
+# Find the common taxonomic groups
+common_taxa <- intersect(filtered_root_I_II$V3_V4_V5_V6, filtered_root_III_IV$V3_V4_V5_V6)
+
+# Find the taxa groups that are unique to filtered_root_III_IV
+unique_taxa_III_IV <- filtered_root_III_IV$V3_V4_V5_V6[!filtered_root_III_IV$V3_V4_V5_V6 %in% common_taxa]
+
+if (length(unique_taxa_III_IV) > 0) {
+  # Filter the dataset to include only unique taxa in filtered_root_III_IV
+  filtered_unique_III_IV <- filtered_root_III_IV %>% filter(V3_V4_V5_V6 %in% unique_taxa_III_IV)
+
+  # Calculate the counts of unique taxa in filtered_root_III_IV
+  unique_taxa_counts_III_IV <- filtered_unique_III_IV %>% count(V3_V4_V5_V6) %>%
+    rename(Taxonomic_Group = V3_V4_V5_V6, Count_III_IV = n) %>%
+    mutate(Count_I_II = 0)  # Since these taxa are unique to filtered_root_III_IV, count in filtered_root_I_II is 0.
+
+  # Calculate the total count
+  unique_taxa_counts_III_IV$Total_Count <- unique_taxa_counts_III_IV$Count_III_IV
+  unique_taxa_counts_III_IV
+  # Create the plot to display the unique taxonomic groups and their counts for filtered_root_III_IV
+  ggplot(unique_taxa_counts_III_IV, aes(x = Taxonomic_Group, y = Total_Count, fill = Taxonomic_Group)) +
+    geom_bar(stat = "identity") +
+    xlab("Taxonomic Group") +
+    ylab("Count") +
+    ggtitle("Unique Taxonomic Groups in stage III_IV ") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.key.size = unit(0.1, "cm"))
+} else {
+  print("No unique taxonomic groups found in filtered_root_III_IV.")
+}
+
+```
+
+
+
+```{r}
+# Assuming you have loaded the dplyr package
+library(dplyr)
+
+# Create a new data frame by combining the columns you need from each original data frame
+new_df <- bind_rows(
+  unique_taxa_counts_III_IV %>% select(Taxonomic_Group, Total_Count),
+  unique_taxa_counts %>% select(Taxonomic_Group, Total_Count),
+  common_taxa_counts %>% select(Taxonomic_Group, Total_Count)
+)
+
+# If you want to remove duplicates based on Taxonomic_Group
+new_df <- new_df %>% 
+  distinct(Taxonomic_Group, .keep_all = TRUE)
+
+# Print the new data frame
+print(new_df)
+
+
+
+```
+
+
+
+```{r}
+
+# Create a new column 'Stage' to indicate the stage for each data group
+new_df <- new_df %>%
+  mutate(Stage = ifelse(Taxonomic_Group %in% unique_taxa_counts_III_IV$Taxonomic_Group, "stage_3_4",
+                        ifelse(Taxonomic_Group %in% unique_taxa_counts$Taxonomic_Group, "stage_1_2", "common")))
+
+# Create a table-like data structure for visualization
+table_data <- new_df %>%
+  select(Taxonomic_Group, Stage, Total_Count) %>%
+  spread(Stage, Total_Count, fill = 0)
+table_data
+
+# Create a matrix from the table data
+heatmap_matrix <- as.matrix(table_data[, -1])
+heatmap_matrix
+# Set the row names to be the Taxonomic Groups
+rownames(heatmap_matrix) <- table_data$Taxonomic_Group
+
+# Create a heatmap-style table using the heatmap() function with 'lty = 0'
+
+
+
+heatmap(heatmap_matrix, col = colorRampPalette(c("white", "purple"))(100), 
+        scale = "column", margins = c(5, 5), cex.axis = 1, , cexRow = 0.8, cexCol = 0.8)
+
+
+
+
+
+
+
+
+  
+```

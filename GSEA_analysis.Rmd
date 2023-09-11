@@ -1,0 +1,66 @@
+---
+title: "GSEA analysis"
+---
+This markdown contains the code for the GSEA enrichment plot.
+
+Load and Join data:
+```{r}
+library(readxl)
+library(dplyr)
+
+
+sig_pro_vol_plot <- read_xlsx(path ="all_proteins_for_enrich.xlsx") # the 671 proteins from the volcano plot
+# inner join to merge the DataFrames
+joined_data <- inner_join(sig_pro_vol_plot, protiens_from_table, by = "Protein")
+joined_data <- select(joined_data, everything())
+print(joined_data)
+
+# Remove duplicate rows from filtered_rows
+joined_data <- joined_data[!duplicated(joined_data), ]
+nrow(joined_data)
+joined_data
+```
+
+
+
+Clean the data:
+```{r}
+library(stringr)
+
+joined_data_after_clean <- joined_data[, c("FC_Adv_stage_vs_early_stage", "KEGG_ko")]
+joined_data_after_clean <- joined_data_after_clean %>% filter(KEGG_ko != "-")
+joined_data_after_clean$KEGG_ko <- str_remove(joined_data_after_clean$KEGG_ko, "ko:")
+joined_data_after_clean$KEGG_ko <- str_split(joined_data_after_clean$KEGG_ko, ",", simplify = TRUE)[, 1]
+joined_data_after_clean
+
+```
+
+
+Create the KO identifiers list:
+```{r}
+library(clusterProfiler)
+library(enrichplot)
+
+original_gene_list = test_3$FC_Adv_stage_vs_early_stage # save the k fold change
+names(original_gene_list) <- joined_data_after_clean$KEGG_ko # save the ko identifiers
+gene_list<-na.omit(original_gene_list) # remove na
+gene_list <- sort(gene_list, decreasing = TRUE)
+gene_list
+
+
+kk2 <- gseKEGG(geneList = gene_list,
+                 organism = 'ko',
+                 pvalueCutoff = 1)
+head(kk2)
+
+```
+
+Visualize the plot for one pathway:
+```{r}
+gseaplot2(kk2, geneSetID = 1)
+```
+Visualize the plot for five pathways:
+```{r}
+gseaplot2(kk2, geneSetID = 1:5, pvalue_table = TRUE)
+
+```

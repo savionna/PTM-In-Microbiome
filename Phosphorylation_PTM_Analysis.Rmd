@@ -1,0 +1,171 @@
+---
+title: "PTM_analysis"
+---
+
+
+# Phosphorylation Post-Translational Modification (PTM) Analysis
+
+Filter rows with phosphorylation:
+```{r}
+# Load the readxl library
+library(readxl)
+library(writexl)
+
+# Define the file path
+file_path <- "colon_cancer_combined_modified_peptide.xlsx"
+
+# Read the Excel file into a data frame
+combined_modified_peptide <- read_excel(file_path)
+#nrow(df)
+filtered_input <- input[grepl("79.9663", input$"Assigned Modifications"), ]
+nrow(filtered_input)
+filtered_input
+
+```
+
+```{r}
+IonQuant_output_filtered_intensities <- IonQuant_output_filtered_intensities[rowSums(IonQuant_output_filtered_intensities == 0) <= 12, ]
+```
+
+
+labels all the proteins: 
+```{r}
+library(readxl)
+library(dplyr)
+
+# Select the desired columns
+selected_columns <- grep("(I_II|III_IV).*MaxLFQ Intensity", colnames(combined_modified_peptide), value = TRUE)
+
+print(selected_columns)
+
+# Create a new table with the sum of the selected columns
+new_table <- combined_modified_peptide %>%
+  mutate(
+    I_II_sum = rowSums(select(., one_of(selected_columns[startsWith(selected_columns, "I_II")]))),
+    III_IV_sum = rowSums(select(., one_of(selected_columns[startsWith(selected_columns, "III_IV")])))
+  )
+
+new_table2 <- new_table %>%
+  mutate(
+    label = ifelse(I_II_sum > III_IV_sum, 12, ifelse(I_II_sum < III_IV_sum, 34, 0))
+  )
+# Specify the output file path
+#output_file <- "/Users/rotempink/Library/Mobile Documents/com~apple~CloudDocs/final_project/proteom_project/excel/combined_modified_peptide_labels.xlsx"
+
+# Write the new_table to an Excel file
+#write_xlsx(new_table2, path = output_file)
+
+library(dplyr)
+
+new_table2_unique <- distinct(new_table2, Protein, .keep_all = TRUE)
+combined_modified_peptide_unique <- distinct(filtered_input, Protein, .keep_all = TRUE)
+
+# Perform the inner join based on the "Protein" column
+inner_join_result <- inner_join(new_table2_unique, combined_modified_peptide_unique, by = "Protein")
+
+# Remove rows where the "label" column has a value of 0
+inner_join_result_filtered <- inner_join_result %>%
+  filter(label != 0)
+
+# Specify the output file path
+#output_file_filtered <- "/Users/rotempink/Library/Mobile Documents/com~apple~CloudDocs/final_project/proteom_project/excel/table1_filtered.xlsx"
+
+# Write the filtered result to an Excel file
+#write_xlsx(inner_join_result_filtered, path = output_file_filtered)
+
+```
+
+```{r}
+pro_with_labels<- read_xlsx("/Users/rotempink/Library/Mobile Documents/com~apple~CloudDocs/final_project/proteom_project/r/labeles_pro_for_ptm.xlsx")
+inner_join_result <- left_join(combined_modified_peptide_unique,pro_with_labels, by = "Protein")
+left_join_no_dup <- inner_join_result[!duplicated(inner_join_result), ]
+
+
+left_join_no_dup
+```
+
+We can see there is one significant protein with phosphorylation:
+```{r}
+library(dplyr)
+library(ggplot2)
+
+
+# inner join to merge the DataFrames
+proteins_with_label_34 <- inner_join_result_filtered %>%
+  filter(label == 34)
+print(proteins_with_label_34)
+
+proteins_with_label_12 <- inner_join_result_filtered %>%
+  filter(label == 12)
+print(proteins_with_label_12)
+
+# Create a new data frame to combine proteins with label 34 and label 12
+combined_proteins <- rbind(
+  mutate(proteins_with_label_34, Label_Type = "Label 34"),
+  mutate(proteins_with_label_12, Label_Type = "Label 12")
+)
+
+combined_proteins
+
+# Assuming you have already filtered the data frames proteins_with_label_34 and proteins_with_label_12.
+
+# Extract the protein names for label 34
+protein_names_label_34 <- proteins_with_label_34$Protein
+
+# Extract the protein names for label 12
+protein_names_label_12 <- proteins_with_label_12$Protein
+
+# Assuming you have already extracted the protein names as protein_names_label_34 and protein_names_label_12.
+
+# Filter out protein names containing "HUMAN" for label 34
+protein_names_label_34_filtered <- protein_names_label_34[!grepl("HUMAN", protein_names_label_34)]
+
+# Filter out protein names containing "HUMAN" for label 12
+protein_names_label_12_filtered <- protein_names_label_12[!grepl("HUMAN", protein_names_label_12)]
+
+# Print the filtered lists of protein names
+print("Proteins with Label 34 (without 'HUMAN'):")
+print(protein_names_label_34_filtered)
+
+print("Proteins with Label 12 (without 'HUMAN'):")
+print(protein_names_label_12_filtered)
+
+
+# Create a bar plot to represent the proteins with label 34 and label 12
+ggplot(data = combined_proteins, aes(x = Protein, fill = Label_Type)) +
+  geom_bar(stat = "count", position = "dodge") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = "Protein", y = "Count", title = "Proteins with Label 34 and Label 12")
+```
+
+# Proteins with phosphorylation table:
+```{r}
+max_length <- max(length(protein_names_label_34_filtered), length(protein_names_label_12_filtered))
+
+# Pad the shorter list with NA values to match the length of the longer list
+list_of_proteins_34 <- c(protein_names_label_34_filtered, rep(NA, max_length - length(protein_names_label_34_filtered)))
+list_of_proteins_12 <- c(protein_names_label_12_filtered, rep(NA, max_length - length(protein_names_label_12_filtered)))
+
+# Combine the lists into a data frame
+protein_table <- data.frame(Proteins_of_patients_stages_3_4 = list_of_proteins_34, Proteins_of_patients_stages_1_2 = list_of_proteins_12)
+
+# Print the table
+print(protein_table)
+
+library(xtable)
+
+# Convert the data frame to LaTeX format
+protein_table_latex <- xtable(protein_table, caption = "Proteins Table")
+
+# Save the table as a PDF file
+pdf("protein_table.pdf")
+print(protein_table_latex)
+dev.off()
+
+# Convert the data frame to HTML format
+protein_table_html <- xtable(protein_table, caption = "Proteins Table")
+
+# Save the table as an HTML file
+print(protein_table_html, type = "html", file = "protein_table.html")
+```
+
