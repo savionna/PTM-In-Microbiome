@@ -1,0 +1,87 @@
+---
+title: "enrichment_plot"
+---
+
+This markdown contains the code for the pathways enrichment plot.
+
+Load the data from eggNOG:
+```{r}
+library(clusterProfiler)
+library(enrichplot)
+library(readxl)
+
+
+protiens_from_table <- read_excel("C:\\Users\\Beatrice\\Documents\\bachelor degree\\Final year\\Project\\identified_uhgp_bacterial_proteins_after_process.xlsx")
+head(protiens_from_table)
+```
+
+Clean the data and run the enrichment plot:
+```{r}
+library(stringr)
+
+
+ko_before_cleaning <- protiens_from_table$KEGG_ko
+ko_after_cleaning <- str_remove(ko_before_cleaning, "ko:*")
+#ko_after_cleaning
+ko_cleaned <- subset(ko_after_cleaning, ko_after_cleaning != "-")
+# Remove everything after the first comma in each element
+ko_cleaned <- str_split(ko_cleaned, ",", simplify = TRUE)[, 1]
+
+# Print the cleaned vector
+ko_cleaned
+
+kk <- enrichKEGG(ko_cleaned , organism = 'ko', pvalueCutoff = 0.05)
+kk
+dotplot(kk, showCategory=10)
+
+```
+
+Run plot that shows the connectivity of the pathway:
+```{r}
+library(clusterProfiler)
+
+kk_2 <- pairwise_termsim(kk)
+emapplot(kk_2, showCategory=10, cex_category = 0.8, cex_label_category = 0.6)
+
+
+```
+
+
+Load only significant proteins:
+
+```{r}
+library(dplyr)
+
+sig_pro <- read_xlsx(path ="sagnificant_prteins_with_labels.xlsx")
+# inner join to merge the DataFrames
+significan_proteins_only <- inner_join(sig_pro, protiens_from_table, by = "Protein")
+significan_proteins_only <- select(significan_proteins_only, label, everything())
+print(significan_proteins_only)
+
+# Remove duplicate rows from filtered_rows
+significan_proteins_only <- significan_proteins_only[!duplicated(significan_proteins_only), ]
+nrow(significan_proteins_only)
+significan_proteins_only
+```
+
+Clean the data and run the enrichment plot for significant proteins only:
+```{r}
+sig_ko_before_cleaning <- significan_proteins_only$KEGG_ko
+sig_ko_after_cleaning <- str_remove(sig_ko_before_cleaning, "ko:*")
+#ko_after_cleaning
+sig_ko_cleaned <- subset(sig_ko_after_cleaning, sig_ko_after_cleaning != "-")
+sig_ko_cleaned <- str_split(sig_ko_cleaned, ",", simplify = TRUE)[, 1]
+
+# Print the cleaned vector
+sig_ko_cleaned
+
+sig_kk <- enrichKEGG(sig_ko_cleaned , organism = 'ko', pvalueCutoff = 0.05)
+sig_kk
+dotplot(sig_kk, showCategory=20)
+```
+
+Run plot that shows the connectivity of the pathways for significant proteins only:
+```{r}
+sig_kk_2 <- pairwise_termsim(sig_kk)
+emapplot(sig_kk_2, cex_category = 0.5, cex_label_category = 0.7)
+```
